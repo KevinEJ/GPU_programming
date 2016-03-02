@@ -1,6 +1,6 @@
 #include <cstdio>
 #include <cstdlib>
-#include "SyncedMemory.h"
+#include "../utils/SyncedMemory.h"
 
 #define CHECK {\
 	auto e = cudaDeviceSynchronize();\
@@ -13,8 +13,10 @@
 __global__ void SomeTransform(char *input_gpu, int fsize) {
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	if (idx < fsize and input_gpu[idx] != '\n') {
-		input_gpu[idx] = '!';
-	}
+		//input_gpu[idx] = '?';
+	    if( input_gpu[idx] > 64 && input_gpu[idx] < 122)
+            input_gpu[idx] = input_gpu[idx] + 1 ;
+    }
 }
 
 int main(int argc, char **argv)
@@ -47,7 +49,7 @@ int main(int argc, char **argv)
 	// An example: transform the first 64 characters to '!'
 	// Don't transform over the tail
 	// And don't transform the line breaks
-	SomeTransform<<<2, 32>>>(input_gpu, fsize);
+	SomeTransform<<<32, 32>>>(input_gpu, fsize);
 
 	puts(text_smem.get_cpu_ro());
 	return 0;
