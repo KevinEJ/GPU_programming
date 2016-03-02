@@ -14,7 +14,8 @@ __global__ void SomeTransform(char *input_gpu, int fsize) {
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	if (idx < fsize and input_gpu[idx] != '\n') {
 		//input_gpu[idx] = '?';
-	    if( input_gpu[idx] > 64 && input_gpu[idx] < 122)
+	    //This program converts the first 1024 letters to the next letter. Ex: transform 'a' to 'b' 
+        if( input_gpu[idx] > 64 && input_gpu[idx] < 122)
             input_gpu[idx] = input_gpu[idx] + 1 ;
     }
 }
