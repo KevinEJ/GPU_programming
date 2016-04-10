@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <memory>
+#define CPU 0
 using std::unique_ptr;
 
 struct Lab2VideoInfo {

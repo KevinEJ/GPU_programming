@@ -26,8 +26,8 @@ int main(int argc, char **argv)
 		puts("Only even frame size is supported");
 		abort();
 	}
-	//unsigned FRAME_SIZE = i.w*i.h*3/2;
-	unsigned FRAME_SIZE = i.w*i.h;
+	unsigned FRAME_SIZE = i.w*i.h*3/2;
+	//unsigned FRAME_SIZE = i.w*i.h;
     printf(" i.w = %d , i.h = %d , i,n_frame = %d , i.fps_n = %d , i.fps_d = %d \n" 
               , i.w,i.h,i.n_frame,i.fps_n,i.fps_d);
 	MemoryBuffer<uint8_t> frameb(FRAME_SIZE);
@@ -36,9 +36,14 @@ int main(int argc, char **argv)
 	fprintf(fp, "YUV4MPEG2 W%d H%d F%d:%d Ip A1:1 C420\n", i.w, i.h, i.fps_n, i.fps_d);
 
 	for (unsigned j = 0; j < i.n_frame; ++j) {
-		fputs("FRAME\n", fp);
-		g.Generate(frames.get_gpu_wo());
-		fwrite(frames.get_cpu_ro(), sizeof(uint8_t), FRAME_SIZE, fp);
+	    //printf("j = %d \n" , j );	
+        fputs("FRAME\n", fp);
+		#if CPU
+        g.Generate(frames.get_cpu_wo());
+		#else
+        g.Generate(frames.get_gpu_wo());
+		#endif
+        fwrite(frames.get_cpu_ro(), sizeof(uint8_t), FRAME_SIZE, fp);
 	}
 
 	fclose(fp);
