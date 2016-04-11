@@ -275,6 +275,8 @@ __global__ void gpu_tran(uint8_t *input_gpu , uint8_t *temp_frame , int* mv , in
     input_gpu[idx] = temp_frame[idx];
     input_gpu[ gpu_U_INDEX ] = temp_frame[ gpu_U_INDEX ] ;
     input_gpu[ gpu_V_INDEX ] = temp_frame[ gpu_V_INDEX ] ; 
+    if( temp_frame[gpu_U_INDEX] != 128 && temp_frame[idx]!=Y_SAT )
+        input_gpu[idx] = Y_SAT + 1 ;
     mv[idx*2] = temp_mv[idx*2];
     mv[idx*2+1] = temp_mv[idx*2+1];
     if(idx == CENTER)
@@ -296,7 +298,7 @@ __global__ void gpu_extention(uint8_t *input_gpu , uint8_t *temp_frame , int *mv
                     temp_frame[640*480 + (blockIdx.x-i)/2*320 + (threadIdx.x-j)/2 ] = input_gpu[gpu_U_INDEX];
                     temp_frame[640*600 + (blockIdx.x-i)/2*320 + (threadIdx.x-j)/2 ] = input_gpu[gpu_V_INDEX];
                     temp_mv[  ((blockIdx.x-i)*640 + (threadIdx.x-j) )*2] = mv[idx*2] ; 
-                    temp_mv[  ((blockIdx.x-i)*640 + (threadIdx.x-j) )*2 +1] = mv[idx*2+1] ; 
+                    temp_mv[  ((blockIdx.x-i)*640 + (threadIdx.x-j) )*2 +1] = mv[idx*2+1] ;
                 }
             }
         }
