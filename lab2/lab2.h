@@ -16,5 +16,5 @@ public:
 	Lab2VideoGenerator();
 	~Lab2VideoGenerator();
 	void get_info(Lab2VideoInfo &info);
-	void Generate(uint8_t *yuv);
+	void Generate(uint8_t *yuv , uint8_t* temp , int* mv , int* temp_mv);
 };
