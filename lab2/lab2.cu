@@ -13,7 +13,7 @@ using namespace std;
 #define CENTER 153920
 #define R      100
 #define Y_SAT  200
-#define CIRCLE_FRE  1100
+#define CIRCLE_FRE  901
 #define Y_INDEX  (i)*640+j
 #define U_INDEX  640*480 + (i/2)*320+(j/2)
 #define V_INDEX  640*600 + (i/2)*320+(j/2)
@@ -103,9 +103,11 @@ void gpu_Generation_firstframe(uint8_t *input_gpu) {
 __global__ void gpu_Generation_firstframe(uint8_t *input_gpu , int t , int* mv) {
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
     input_gpu[idx] = 128 ;
+    mv[idx*2] = 0 ; 
+    mv[idx*2 + 1] = 0 ; 
     // Y
         int distance = sqrtf((blockIdx.x-240)*(blockIdx.x-240)+(threadIdx.x-320)*(threadIdx.x-320));
-        if(distance >= R*0.7 && distance <= R*1.8){
+        if(distance >= R*0.8 && distance <= R*1.8){
   
   int* result = new int(0);
   curandState_t state;
@@ -119,8 +121,8 @@ __global__ void gpu_Generation_firstframe(uint8_t *input_gpu , int t , int* mv) 
                 input_gpu[idx] = Y_SAT ;
                 input_gpu[gpu_U_INDEX] = (rand_num/CIRCLE_FRE)*167 % 255 ;  
                 input_gpu[gpu_V_INDEX] = (rand_num/CIRCLE_FRE)*193 % 255 ;  
-                mv[idx*2] = rand_num / CIRCLE_FRE % 7 ; 
-                mv[idx*2+1] = rand_num / CIRCLE_FRE % 11 ; 
+                mv[idx*2] = 1 + ((rand_num / CIRCLE_FRE )% 11 ); 
+                mv[idx*2+1] = 1 + ((rand_num / CIRCLE_FRE) % 13 ); 
                 
                 if(rand_num/CIRCLE_FRE % 4 == 0 ){
                 }else if(rand_num/CIRCLE_FRE % 4 == 1 ){
@@ -198,19 +200,19 @@ __global__ void gpu_Generation_changeColor(uint8_t *input_gpu , int* mv){
                 move_u *= -1 ;
                 move_v *= -1 ;
             }*/
-            
-            if( move_u + input_gpu[gpu_U_INDEX] > 240 )
+             
+            if( move_u + input_gpu[gpu_U_INDEX] > 255 )
                 mv[idx*2] *= -1 ; 
-            else if( move_u + input_gpu[gpu_U_INDEX] < 15 ) 
+            else if( move_u + input_gpu[gpu_U_INDEX] < 0 ) 
                 mv[idx*2] *= -1 ;
  
-            if( move_v + input_gpu[gpu_V_INDEX] > 240 ) 
+            if( move_v + input_gpu[gpu_V_INDEX] > 255 ) 
                 mv[idx*2+1] *= -1 ; 
-            else if( move_v + input_gpu[gpu_V_INDEX] < 15 ) 
+            else if( move_v + input_gpu[gpu_V_INDEX] < 0 ) 
                 mv[idx*2+1] *= -1 ; 
             
-                input_gpu[gpu_V_INDEX]+=mv[idx*2] ; 
-                input_gpu[gpu_U_INDEX]+=mv[idx*2+1] ; 
+                input_gpu[gpu_U_INDEX]+=mv[idx*2] ; 
+                input_gpu[gpu_V_INDEX]+=mv[idx*2+1] ; 
             /*
             if(input_gpu[gpu_U_INDEX] == 230 && input_gpu[gpu_V_INDEX]!=230)
                 input_gpu[gpu_V_INDEX]+=10 ; 
@@ -293,14 +295,14 @@ __global__ void gpu_extention(uint8_t *input_gpu , uint8_t *temp_frame , int *mv
                     temp_frame[(blockIdx.x-i)*640 + (threadIdx.x-j)] = Y_SAT+1 ; 
                     temp_frame[640*480 + (blockIdx.x-i)/2*320 + (threadIdx.x-j)/2 ] = input_gpu[gpu_U_INDEX];
                     temp_frame[640*600 + (blockIdx.x-i)/2*320 + (threadIdx.x-j)/2 ] = input_gpu[gpu_V_INDEX];
-                    //temp_mv[  ((blockIdx.x-i)*640 + (threadIdx.x-j) )*2] = mv[idx*2] ; 
-                    //temp_mv[  ((blockIdx.x-i)*640 + (threadIdx.x-j) )*2 +1] = mv[idx*2+1] ; 
+                    temp_mv[  ((blockIdx.x-i)*640 + (threadIdx.x-j) )*2] = mv[idx*2] ; 
+                    temp_mv[  ((blockIdx.x-i)*640 + (threadIdx.x-j) )*2 +1] = mv[idx*2+1] ; 
                 }
             }
         }
         temp_frame[idx] = input_gpu[idx] ; 
-        //temp_mv[idx*2] = mv[idx*2] ; 
-        //temp_mv[idx*2+1] = mv[idx*2+1] ; 
+        temp_mv[idx*2] = mv[idx*2] ; 
+        temp_mv[idx*2+1] = mv[idx*2+1] ; 
         //temp_frame[gpu_U_INDEX] = input_gpu[gpu_U_INDEX] ;
         //temp_frame[gpu_V_INDEX] = input_gpu[gpu_V_INDEX] ;
     } 
@@ -346,6 +348,7 @@ void Lab2VideoGenerator::Generate(uint8_t *yuv , uint8_t * temp_frame , int* mv 
             gpu_Generation_firstframe(yuv,temp_frame,temp_2_frame,impl->t , mv);
         #else
             cudaMemset(yuv+W*H, 128, W*H/2);
+            cudaMemset(temp_mv , 0 , W*H*2);
             gpu_Generation_firstframe<<<480,640>>>(yuv , impl->t , mv);
             gpu_extention<<<480,640>>>(yuv , temp_frame , mv , temp_mv);
             gpu_tran<<<480,640>>>    (yuv , temp_frame , mv , temp_mv);
@@ -358,6 +361,7 @@ void Lab2VideoGenerator::Generate(uint8_t *yuv , uint8_t * temp_frame , int* mv 
         #else
             gpu_Generation_changeColor<<<480,640>>>(yuv , mv );
             //cudaMemset(temp_mv , 0 , W*H*2);
+            cudaMemset(temp_mv , 0 , W*H*2);
             gpu_extention<<<480,640>>>(yuv , temp_frame , mv , temp_mv);
             gpu_tran<<<480,640>>>    (yuv , temp_frame , mv , temp_mv);
         #endif
