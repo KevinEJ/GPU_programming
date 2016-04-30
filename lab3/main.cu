@@ -17,7 +17,7 @@ using namespace std;
 
 int main(int argc, char **argv)
 {
-	if (argc != 7) {
+	if (argc != 8) {
 		printf("Usage: %s <background> <target> <mask> <offset x> <offset y> <output>\n", argv[0]);
 		abort();
 	}
@@ -30,7 +30,9 @@ int main(int argc, char **argv)
 		puts("Something wrong with reading the input image files.");
 		abort();
 	}
-	if (wt != wm or ht != hm) {
+	printf("wt , ht = %d , %d \n" , wt , ht );
+	printf("wm , hm = %d , %d \n" , wm , hm );
+    if (wt != wm or ht != hm) {
 		puts("The mask and target image must have the same size.");
 		abort();
 	}
@@ -43,7 +45,7 @@ int main(int argc, char **argv)
 		abort();
 	}
 	const int oy = atoi(argv[4]), ox = atoi(argv[5]);
-
+    const int Num_iter = atoi(argv[7]);
 	const int SIZEB = wb*hb*3;
 	const int SIZET = wt*ht*3;
 	const int SIZEM = wm*hm;
@@ -65,7 +67,7 @@ int main(int argc, char **argv)
 		target_s.get_gpu_ro(),
 		mask_s.get_gpu_ro(),
 		output_s.get_gpu_wo(),
-		wb, hb, wt, ht, oy, ox
+		wb, hb, wt, ht, oy, ox, Num_iter
 	);
 
 	unique_ptr<uint8_t[]> o(new uint8_t[SIZEB]);
