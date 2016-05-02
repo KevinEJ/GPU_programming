@@ -200,12 +200,11 @@ void PoissonImageCloning(
 	const float *mask,
 	float *output,
 	const int wb, const int hb, const int wt, const int ht,
-	const int oy, const int ox, const int Num_iter
-)
+	const int oy, const int ox)
 {
     printf("wb , hb , wt , ht , oy , ox  = %d , %d , %d , %d , %d , %d \n" , 
             wb , hb , wt , ht , oy , ox );
-	
+    const int Num_iter = 1000 ;	
     float *fixed , *buf1, *buf2 ; 
     cudaMalloc(&fixed, 3*wt*ht*sizeof(float));
     cudaMalloc(&buf1, 3*wt*ht*sizeof(float));
@@ -216,30 +215,60 @@ void PoissonImageCloning(
     CalculateFixed<<<gdim, bdim>>>(  background, target, mask, fixed,
                                         wb, hb, wt, ht, oy, ox );
     cudaMemcpy(buf1, target, sizeof(float)*3*wt*ht, cudaMemcpyDeviceToDevice);
-    //Initial_solution<<<gdim,bdim>>>( background , buf1 , wb , hb , wt , ht , oy , ox  ) ;
+    Initial_solution<<<gdim,bdim>>>( background , buf1 , wb , hb , wt , ht , oy , ox  ) ;
     cudaMemcpy(buf2, buf1, sizeof(float)*3*wt*ht, cudaMemcpyDeviceToDevice);
     
     float w = 1 ; 
     //bool *isConv ;
     //cudaMalloc(&isConv, 1*sizeof(bool));
     // Down Scaling
-    /*const int Scale = 2 ; 
-    float *fixed_2 , *buf1_2, *buf2_2 , *mask_2 ; 
+    int Scale = 4 ; 
+    
+    float *fixed_4 , *buf1_4, *buf2_4 , *mask_4 , *target_4; 
+    cudaMalloc(&fixed_4, 3*wt/Scale*ht/Scale*sizeof(float));
+    cudaMalloc(&buf1_4, 3*wt/Scale*ht/Scale*sizeof(float));
+    cudaMalloc(&buf2_4, 3*wt/Scale*ht/Scale*sizeof(float));
+    cudaMalloc(&mask_4, 3*wt/Scale*ht/Scale*sizeof(float));
+    cudaMalloc(&target_4, 3*wt/Scale*ht/Scale*sizeof(float));
+
+    dim3 gdim_4(CeilDiv(wt/Scale,32), CeilDiv(ht/Scale,16)), bdim_4(32,16);
+    DownSampling_2<<< gdim_4,bdim_4 >>> (target , target_4 , wt/Scale , ht/Scale , Scale );
+    DownSampling_2<<< gdim_4,bdim_4 >>> (buf1  , buf1_4  , wt/Scale , ht/Scale , Scale );
+    DownSampling_2<<< gdim_4,bdim_4 >>> (buf2  , buf2_4  , wt/Scale , ht/Scale , Scale );
+    DownSampling_2<<< gdim_4,bdim_4 >>> (mask  , mask_4  , wt/Scale , ht/Scale , Scale );
+    CalculateFixed<<< gdim_4,bdim_4 >>> (background, target_4, mask_4, fixed_4,
+                                        wb, hb, wt/Scale, ht/Scale, oy, ox );
+    
+    for (int i = 0; i < Num_iter*6/10; ++i) {
+        PoissonImageCloningIteration<<<gdim_4, bdim_4>>>(background, fixed_4, mask_4, buf1_4, buf2_4,
+                                        wb, hb, wt/Scale, ht/Scale, oy, ox ,w , Scale);
+        PoissonImageCloningIteration<<<gdim_4, bdim_4>>>(background, fixed_4, mask_4, buf2_4, buf1_4,
+                                        wb, hb, wt/Scale, ht/Scale, oy, ox ,w , Scale);
+    }
+    
+    Scale = 2 ;
+
+    float *fixed_2 , *buf1_2, *buf2_2 , *mask_2 , *target_2; 
     cudaMalloc(&fixed_2, 3*wt/Scale*ht/Scale*sizeof(float));
     cudaMalloc(&buf1_2, 3*wt/Scale*ht/Scale*sizeof(float));
     cudaMalloc(&buf2_2, 3*wt/Scale*ht/Scale*sizeof(float));
     cudaMalloc(&mask_2, 3*wt/Scale*ht/Scale*sizeof(float));
+    cudaMalloc(&target_2, 3*wt/Scale*ht/Scale*sizeof(float));
     
     dim3 gdim_2(CeilDiv(wt/Scale,32), CeilDiv(ht/Scale,16)), bdim_2(32,16);
-    //DownSampling_2<<< gdim_2,bdim_2 >>> (fixed , fixed_2 , wt/Scale , Scale );
-    DownSampling_2<<< gdim_2,bdim_2 >>> (buf1  , buf1_2  , wt/Scale , ht/Scale , Scale );
-    DownSampling_2<<< gdim_2,bdim_2 >>> (buf2  , buf2_2  , wt/Scale , ht/Scale , Scale );
+    
+    UpSampling_2<<< gdim_2,bdim_2 >>> (buf1_4  , buf1_2 , wt/Scale  , ht/Scale , Scale );
+    UpSampling_2<<< gdim_2,bdim_2 >>> (buf2_4  , buf2_2 , wt/Scale  , ht/Scale , Scale );
+    
+    DownSampling_2<<< gdim_2,bdim_2 >>> (target , target_2 , wt/Scale , ht/Scale , Scale );
+    //DownSampling_2<<< gdim_2,bdim_2 >>> (buf1  , buf1_2  , wt/Scale , ht/Scale , Scale );
+    //DownSampling_2<<< gdim_2,bdim_2 >>> (buf2  , buf2_2  , wt/Scale , ht/Scale , Scale );
     DownSampling_2<<< gdim_2,bdim_2 >>> (mask  , mask_2  , wt/Scale , ht/Scale , Scale );
-    CalculateFixed<<< gdim_2,bdim_2 >>> (background, buf1_2, mask_2, fixed_2,
+    CalculateFixed<<< gdim_2,bdim_2 >>> (background, target_2, mask_2, fixed_2,
                                         wb, hb, wt/Scale, ht/Scale, oy, ox );
    
 
-    for (int i = 0; i < Num_iter/5; ++i) {
+    for (int i = 0; i < Num_iter*3/10; ++i) {
         PoissonImageCloningIteration<<<gdim_2, bdim_2>>>(background, fixed_2, mask_2, buf1_2, buf2_2,
                                         wb, hb, wt/Scale, ht/Scale, oy, ox ,w , Scale);
         PoissonImageCloningIteration<<<gdim_2, bdim_2>>>(background, fixed_2, mask_2, buf2_2, buf1_2,
@@ -250,13 +279,13 @@ void PoissonImageCloning(
     UpSampling_2<<< gdim,bdim >>> (buf2_2  , buf2 , wt  , ht , Scale );
     //UpSampling_2<<< gdim,bdim >>> (mask_2  , mask);
 
-*/
+
     // iterate
     //float w = 3 ;
     //float Num_iter = 1000 ;
-    w = 2 ;
+    w = 1 ;
 
-    for (int i = 0; i < Num_iter*4/5; ++i) {
+    for (int i = 0; i < Num_iter*1/10; ++i) {
         PoissonImageCloningIteration<<<gdim, bdim>>>(background, fixed, mask, buf1, buf2,
                                         wb, hb, wt, ht, oy, ox ,w ,1 );
         PoissonImageCloningIteration<<<gdim, bdim>>>(background, fixed, mask, buf2, buf1,
