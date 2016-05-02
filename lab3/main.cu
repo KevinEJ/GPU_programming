@@ -30,8 +30,8 @@ int main(int argc, char **argv)
 		puts("Something wrong with reading the input image files.");
 		abort();
 	}
-	printf("wt , ht = %d , %d \n" , wt , ht );
-	printf("wm , hm = %d , %d \n" , wm , hm );
+	//printf("wt , ht = %d , %d \n" , wt , ht );
+	//printf("wm , hm = %d , %d \n" , wm , hm );
     if (wt != wm or ht != hm) {
 		puts("The mask and target image must have the same size.");
 		abort();

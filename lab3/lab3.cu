@@ -5,7 +5,7 @@
 __device__ __host__ int CeilDiv(int a, int b) { return (a-1)/b + 1; }
 __device__ __host__ int CeilAlign(int a, int b) { return CeilDiv(a, b) * b; }
 
-__global__ void DownSampling_2 ( const float *a , float *b , const int wt , const int Scale);
+__global__ void DownSampling_2 ( const float *a , float *b , const int wt , const int ht , const int Scale);
 __global__ void UpSampling_2 ( const float *a , float *b , const int wt ,const int ht  , const int Scale);
 __global__ void Initial_solution( const float *background , float *buf1 , 
                         const int wb , const int hb , const int wt , const int ht , const int oy , const int ox  ) ;
@@ -81,7 +81,7 @@ __global__ void CalculateFixed(
         
     int n_of_b =   4 -( (int)b_up + (int)b_down + (int)b_left + (int)b_right ) ;
     //if( yt < ht and xt < wt and mask[curt]>127.0f){
-    if( yt < ht and xt < wt ){
+    if( yt >= 0 and xt>= 0 and yt < ht and xt < wt ){
         gradient[curt*3]   = ( n_of_b * target[curt*3]   - Rt_up - Rt_down - Rt_left - Rt_right) / n_of_b ;  
         gradient[curt*3+1] = ( n_of_b * target[curt*3+1] - Gt_up - Gt_down - Gt_left - Gt_right) / n_of_b ;  
         gradient[curt*3+2] = ( n_of_b * target[curt*3+2] - Bt_up - Bt_down - Bt_left - Bt_right) / n_of_b ;  
@@ -100,9 +100,9 @@ __global__ void CalculateFixed(
         gradient[curt*3+2] += background[curb_left*3+2]*(int)(b_left) ;
         gradient[curt*3+2] += background[curb_right*3+2]*(int)(b_right) ;*/
     }else{
-        gradient[curt*3] =   target[curt*3] ;
-        gradient[curt*3+1] = target[curt*3+1] ;
-        gradient[curt*3+2] = target[curt*3+2] ;
+        //gradient[curt*3] =  128;// target[curt*3] ;
+        //gradient[curt*3+1] = 0;//target[curt*3+1] ;
+        //gradient[curt*3+2] = 0;//target[curt*3+2] ;
     }
 }
 
@@ -144,7 +144,7 @@ __global__ void PoissonImageCloningIteration(
         const int curb_left  = wb*yb     +xb-1;
         const int curb_right = wb*yb     +xb+1;
 
-    if( yt < ht and xt < wt and mask[curt]>127.0f){
+    if( yt>= 0 and xt >= 0 and  yt < ht and xt < wt and mask[curt]>127.0f){
     //mask boundary condition
         bool b_up    = ( yt==0  or mask[up_n]<127.0f)? true : false ; 
         bool b_down  = ( yt==(ht-1) or mask[down_n]<127.0f)? true : false ; 
@@ -173,24 +173,25 @@ __global__ void PoissonImageCloningIteration(
                                            + Bt_right*(int)(!b_right)+ background[3*curb_right+2]*(int)(b_right) ) 
                         / (float)n_of_b ;  
         }
-    }else{
+        // SOR??
+        float a =  buf2[curt*3]*w + (1-w)*target[curt*3+0] ;
+        float b =  buf2[curt*3+1]*w + (1-w)*target[curt*3+1] ;
+        float c =  buf2[curt*3+2]*w + (1-w)*target[curt*3+2] ;
+        if( a > 255 || a < 0 || b > 255 || b < 0 || c>255 || c<0)
+        {}
+        else{
+        buf2[curt*3]   =  buf2[curt*3]   *w + (1-w)*target[curt*3+0]     ;
+        buf2[curt*3+1] =  buf2[curt*3+1] *w + (1-w)*target[curt*3+1]     ;
+        buf2[curt*3+2] =  buf2[curt*3+2] *w + (1-w)*target[curt*3+2]     ;
+        }
+
+    }else if( yt>= 0 and xt >= 0 and  yt < ht and xt < wt){
         buf2[curt*3] = background[curb*3+0] ;//target[curt*3] ;
         buf2[curt*3+1] = background[curb*3+1] ;
         buf2[curt*3+2] = background[curb*3+2] ;
     }
 
-    // SOR??
-    float a =  buf2[curt*3]*w + (1-w)*target[curt*3+0] ;
-    float b =  buf2[curt*3+1]*w + (1-w)*target[curt*3+1] ;
-    float c =  buf2[curt*3+2]*w + (1-w)*target[curt*3+2] ;
-    if( a >= 255 || a <= 0 || b >= 255 || b <= 0 || c>=255 || c<=0)
-    {}
-    else{
-    buf2[curt*3]   =  buf2[curt*3]   *w + (1-w)*target[curt*3+0]     ;
-    buf2[curt*3+1] =  buf2[curt*3+1] *w + (1-w)*target[curt*3+1]     ;
-    buf2[curt*3+2] =  buf2[curt*3+2] *w + (1-w)*target[curt*3+2]     ;
-    }
-    
+        
 }
 
 void PoissonImageCloning(
@@ -231,42 +232,48 @@ void PoissonImageCloning(
     
     dim3 gdim_2(CeilDiv(wt/Scale,32), CeilDiv(ht/Scale,16)), bdim_2(32,16);
     //DownSampling_2<<< gdim_2,bdim_2 >>> (fixed , fixed_2 , wt/Scale , Scale );
-    DownSampling_2<<< gdim_2,bdim_2 >>> (buf1  , buf1_2  , wt/Scale , Scale );
-    DownSampling_2<<< gdim_2,bdim_2 >>> (buf2  , buf2_2  , wt/Scale , Scale );
-    DownSampling_2<<< gdim_2,bdim_2 >>> (mask  , mask_2  , wt/Scale , Scale );
+    DownSampling_2<<< gdim_2,bdim_2 >>> (buf1  , buf1_2  , wt/Scale , ht/Scale , Scale );
+    DownSampling_2<<< gdim_2,bdim_2 >>> (buf2  , buf2_2  , wt/Scale , ht/Scale , Scale );
+    DownSampling_2<<< gdim_2,bdim_2 >>> (mask  , mask_2  , wt/Scale , ht/Scale , Scale );
     CalculateFixed<<< gdim_2,bdim_2 >>> (background, buf1_2, mask_2, fixed_2,
                                         wb, hb, wt/Scale, ht/Scale, oy, ox );
    
 
-    for (int i = 0; i < Num_iter/10; ++i) {
+    for (int i = 0; i < Num_iter/5; ++i) {
         PoissonImageCloningIteration<<<gdim_2, bdim_2>>>(background, fixed_2, mask_2, buf1_2, buf2_2,
                                         wb, hb, wt/Scale, ht/Scale, oy, ox ,w , Scale);
         PoissonImageCloningIteration<<<gdim_2, bdim_2>>>(background, fixed_2, mask_2, buf2_2, buf1_2,
                                         wb, hb, wt/Scale, ht/Scale, oy, ox ,w , Scale);
     }
-    UpSampling_2<<< gdim,bdim >>> (fixed_2 , fixed , wt , ht , Scale);
+    //UpSampling_2<<< gdim,bdim >>> (fixed_2 , fixed , wt , ht , Scale);
     UpSampling_2<<< gdim,bdim >>> (buf1_2  , buf1 , wt  , ht , Scale );
     UpSampling_2<<< gdim,bdim >>> (buf2_2  , buf2 , wt  , ht , Scale );
     //UpSampling_2<<< gdim,bdim >>> (mask_2  , mask);
-*/
 
+*/
     // iterate
     //float w = 3 ;
     //float Num_iter = 1000 ;
-    w = 1 ;
+    w = 2 ;
 
-    for (int i = 0; i < Num_iter*9/10; ++i) {
+    for (int i = 0; i < Num_iter*4/5; ++i) {
         PoissonImageCloningIteration<<<gdim, bdim>>>(background, fixed, mask, buf1, buf2,
                                         wb, hb, wt, ht, oy, ox ,w ,1 );
         PoissonImageCloningIteration<<<gdim, bdim>>>(background, fixed, mask, buf2, buf1,
                                         wb, hb, wt, ht, oy, ox ,w ,1 );
-        w = 1 + ( (w-1) / 1.05 ) ;
+        w = 1 + ( (w-1) / 1.1 ) ;
     }
 
 
     cudaMemcpy(output, background, wb*hb*sizeof(float)*3, cudaMemcpyDeviceToDevice);
-	SimpleClone<<<dim3(CeilDiv(wt,32), CeilDiv(ht,16)), dim3(32,16)>>>(
+	if(Num_iter != 0 )
+    SimpleClone<<<dim3(CeilDiv(wt,32), CeilDiv(ht,16)), dim3(32,16)>>>(
 		background, buf1, mask, output,
+		wb, hb, wt, ht, oy, ox
+	);
+    else
+    SimpleClone<<<dim3(CeilDiv(wt,32), CeilDiv(ht,16)), dim3(32,16)>>>(
+		background, fixed, mask, output,
 		wb, hb, wt, ht, oy, ox
 	);
     cudaFree(fixed);
@@ -274,7 +281,7 @@ void PoissonImageCloning(
     cudaFree(buf2);
 }
 
-__global__ void DownSampling_2 ( const float *a , float *b , const int wt , const int Scale){
+__global__ void DownSampling_2 ( const float *a , float *b , const int wt , const int ht , const int Scale){
     const int yt = blockIdx.y * blockDim.y + threadIdx.y;
 	const int xt = blockIdx.x * blockDim.x + threadIdx.x;
 	const int curt_a = (wt*Scale)*(yt*Scale)+(xt*Scale);
@@ -283,12 +290,14 @@ __global__ void DownSampling_2 ( const float *a , float *b , const int wt , cons
 	const int curt_a_rd = (wt*Scale)*(yt*Scale+1)+(xt*Scale+1);
 	const int curt_b = wt*(yt)+(xt);
    
+    if( yt>= 0 and xt >= 0 and  yt < ht and xt < wt){
     //b[curt_b*3+0] = a[curt_a*3+0] + ; 
-    b[curt_b*3] = ( a[curt_a*3] + a[curt_a_r*3] + a[curt_a_d*3] + a[curt_a_rd*3] ) / 4 ;  
-    b[curt_b*3+1] = ( a[curt_a*3+1] + a[curt_a_r*3+1] + a[curt_a_d*3+1] + a[curt_a_rd*3+1] ) / 4 ;  
-    b[curt_b*3+2] = ( a[curt_a*3+2] + a[curt_a_r*3+2] + a[curt_a_d*3+2] + a[curt_a_rd*3+2] ) / 4 ;  
+        b[curt_b*3] = ( a[curt_a*3] + a[curt_a_r*3] + a[curt_a_d*3] + a[curt_a_rd*3] ) / 4 ;  
+        b[curt_b*3+1] = ( a[curt_a*3+1] + a[curt_a_r*3+1] + a[curt_a_d*3+1] + a[curt_a_rd*3+1] ) / 4 ;  
+        b[curt_b*3+2] = ( a[curt_a*3+2] + a[curt_a_r*3+2] + a[curt_a_d*3+2] + a[curt_a_rd*3+2] ) / 4 ;  
     //b[curt_b*3+1] = a[curt_a*3+1]; 
     //b[curt_b*3+2] = a[curt_a*3+2]; 
+    }
 }
 __global__ void UpSampling_2 ( const float *a , float *b , const int wt , const int ht, const int Scale){
     const int yt = blockIdx.y * blockDim.y + threadIdx.y;
@@ -299,7 +308,8 @@ __global__ void UpSampling_2 ( const float *a , float *b , const int wt , const 
     const int curt_a_right = (wt/Scale)*(yt/Scale)+(xt/Scale+1);
     const int curt_a_down  = (wt/Scale)*(yt/Scale+1)+(xt/Scale);
     const int curt_a_rd    = (wt/Scale)*(yt/Scale+1)+(xt/Scale+1);
-
+  
+    if( yt>= 0 and xt >= 0 and  yt < ht and xt < wt){
 	if(Scale == 2 ){
         if(yt%Scale == 1 and yt != (ht-1)){
             if(xt%Scale == 1 and xt !=(wt-1)){
@@ -325,7 +335,7 @@ __global__ void UpSampling_2 ( const float *a , float *b , const int wt , const 
         
         }
     }
-   
+  } 
     //b[curt_b*3+0] = a[curt_a*3+0]; 
     //b[curt_b*3+1] = a[curt_a*3+1]; 
     //b[curt_b*3+2] = a[curt_a*3+2]; 
@@ -358,7 +368,7 @@ __global__ void Initial_solution( const float *background , float *buf1 ,
     const float Gf = Yt - 0.39465*(U) -0.58060*(V); 
     const float Bf = Yt + 2.03211*(U) ; 
     
-    if ( yt < ht and xt < wt ){
+    if( yt>= 0 and xt >= 0 and  yt < ht and xt < wt){
 			buf1[curt*3+0] = Rf ;
 			buf1[curt*3+1] = Gf ;
 			buf1[curt*3+2] = Bf ;
